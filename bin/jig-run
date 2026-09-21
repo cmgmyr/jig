@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Dispatcher: every wb-<name> on PATH is a symlink here. Runs src/<name>.ts
+# with the Node interpreter pinned at ~/.config/jig/node, never one chosen
+# by asdf, nvm, fnm, or PATH.
+set -euo pipefail
+
+resolve_self() {
+  local p="$1" dir
+  while [ -L "$p" ]; do
+    dir="$(cd "$(dirname "$p")" && pwd -P)"
+    p="$(readlink "$p")"
+    [[ "$p" != /* ]] && p="$dir/$p"
+  done
+  echo "$(cd "$(dirname "$p")" && pwd -P)/$(basename "$p")"
+}
+
+SELF="$(resolve_self "${BASH_SOURCE[0]}")"
+JIG_ROOT="$(cd "$(dirname "$SELF")/.." && pwd -P)"
+export JIG_ROOT
+
+name="$(basename "$0")"
+if [ "$name" = "jig-run" ]; then
+  if [ $# -eq 0 ]; then
+    echo "usage: jig-run <command> [args]   (or call wb-<command>)" >&2
+    exit 2
+  fi
+  name="$1"; shift
+fi
+name="${name#wb-}"
+
+script="$JIG_ROOT/src/$name.ts"
+if [ ! -f "$script" ]; then
+  echo "wb: unknown command '$name' (no $script)" >&2
+  exit 2
+fi
+
+NODE_LINK="${JIG_NODE_LINK:-$HOME/.config/jig/node}"
+MIN_MAJOR=22 MIN_MINOR=18
+
+fix_hint() {
+  cat >&2 <<MSG
+wb: $1
+
+jig needs a pinned Node >= $MIN_MAJOR.$MIN_MINOR at $NODE_LINK.
+Fix:
+  brew install node@24 && cd "$JIG_ROOT" && ./install.sh
+or, to pin a specific binary:
+  JIG_NODE=/abs/path/to/bin/node "$JIG_ROOT/install.sh"
+MSG
+  exit 1
+}
+
+[ -L "$NODE_LINK" ] || fix_hint "$NODE_LINK is missing or not a symlink"
+node="$(readlink "$NODE_LINK")"
+[ -x "$node" ] || fix_hint "$NODE_LINK -> $node does not exist or is not executable"
+
+version="$("$node" --version 2>/dev/null || true)"
+version="${version#v}"
+major="${version%%.*}"
+rest="${version#*.}"
+minor="${rest%%.*}"
+case "$major" in
+  ''|*[!0-9]*) fix_hint "$node did not report a version" ;;
+esac
+if [ "$major" -lt "$MIN_MAJOR" ] || { [ "$major" -eq "$MIN_MAJOR" ] && [ "${minor:-0}" -lt "$MIN_MINOR" ]; }; then
+  fix_hint "$node is v$version; need >= $MIN_MAJOR.$MIN_MINOR"
+fi
+
+exec "$node" --disable-warning=ExperimentalWarning "$script" "$@"

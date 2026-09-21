@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# The one user-facing command.
+#   wb                  launch the agent at the workbench root
+#   wb <slug>           launch focused on entries/<slug>
+#   wb capture "text"   write an inbox note and commit (alias: wb c)
+#   wb doctor [--fix]   check the install and the data repo
+set -uo pipefail
+
+resolve_self() {
+  local p="$1" dir
+  while [ -L "$p" ]; do
+    dir="$(cd "$(dirname "$p")" && pwd -P)"
+    p="$(readlink "$p")"
+    [[ "$p" != /* ]] && p="$dir/$p"
+  done
+  echo "$(cd "$(dirname "$p")" && pwd -P)/$(basename "$p")"
+}
+
+SELF="$(resolve_self "${BASH_SOURCE[0]}")"
+JIG_ROOT="$(cd "$(dirname "$SELF")/.." && pwd -P)"
+RUN="$JIG_ROOT/bin/jig-run"
+
+WORKBENCH_HOME="${WORKBENCH_HOME:-$HOME/workbench}"
+WORKBENCH_HOME="${WORKBENCH_HOME/#\~/$HOME}"
+export WORKBENCH_HOME
+
+usage() {
+  sed -n '2,6p' "$SELF" | sed 's/^# \{0,1\}//'
+}
+
+die() { echo "wb: $*" >&2; exit 1; }
+
+ensure_workbench() {
+  [ -f "$WORKBENCH_HOME/.workbench.yml" ] && return 0
+  if [ ! -t 0 ] || [ ! -t 1 ]; then
+    die "$WORKBENCH_HOME is not a workbench. Run: wb-init $WORKBENCH_HOME"
+  fi
+  echo "wb: $WORKBENCH_HOME is not a workbench."
+  printf 'Create one there now? [y/N] '
+  read -r answer
+  case "$answer" in
+    y|Y|yes|YES) "$RUN" init "$WORKBENCH_HOME" || exit 1 ;;
+    *) die "aborted. Set WORKBENCH_HOME or run wb-init <path>." ;;
+  esac
+}
+
+agent_cmd() {
+  if [ -n "${WB_AGENT_CMD:-}" ]; then echo "$WB_AGENT_CMD"; return; fi
+  case "${WB_AGENT:-claude}" in
+    claude) echo 'claude "{prompt}"' ;;
+    codex)  echo 'codex "{prompt}"' ;;
+    *) die "unknown WB_AGENT '${WB_AGENT}'; set WB_AGENT_CMD" ;;
+  esac
+}
+
+# Rewrites the {prompt} placeholder to "$1" so the prompt is passed as a real
+# argument to bash -c, never interpolated into the command text.
+launch_agent() {
+  local prompt="$1" cmd
+  cmd="$(agent_cmd)" || exit 1
+  cmd="${cmd//\"\{prompt\}\"/\"\$1\"}"
+  cmd="${cmd//\'\{prompt\}\'/\"\$1\"}"
+  cmd="${cmd//\{prompt\}/\"\$1\"}"
+  bash -c "$cmd" wb-agent "$prompt"
+}
+
+pull_if_remote() {
+  if [ -n "$(git -C "$WORKBENCH_HOME" remote 2>/dev/null)" ]; then
+    if ! git -C "$WORKBENCH_HOME" pull --ff-only -q 2>/dev/null; then
+      echo "wb: warning: git pull failed (offline or diverged); continuing" >&2
+    fi
+  fi
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  -h|--help|help)
+    usage; exit 0 ;;
+  capture|c)
+    shift
+    ensure_workbench
+    exec "$RUN" capture "$@" ;;
+  doctor)
+    shift
+    exec "$RUN" doctor "$@" ;;
+  init)
+    shift
+    exec "$RUN" init "$@" ;;
+  -*)
+    die "unknown option '$cmd'" ;;
+esac
+
+ensure_workbench
+cd "$WORKBENCH_HOME" || die "cannot cd to $WORKBENCH_HOME"
+
+slug=""
+if [ -n "$cmd" ]; then
+  [ $# -gt 1 ] && die "too many arguments; usage: wb [<slug>|capture|doctor]"
+  if [ ! -d "entries/$cmd" ]; then
+    matches="$(ls entries 2>/dev/null | grep -i -- "$cmd" | head -5 | tr '\n' ' ')"
+    if [ -n "$matches" ]; then
+      die "no entry '$cmd'. Close matches: $matches"
+    fi
+    all="$(ls entries 2>/dev/null | head -10 | tr '\n' ' ')"
+    die "no entry '$cmd'.${all:+ Entries: $all}"
+  fi
+  slug="$cmd"
+fi
+
+pull_if_remote
+
+if [ -n "$slug" ]; then
+  prompt="Read AGENTS.md. Focus on entries/$slug."
+else
+  prompt="Read AGENTS.md. Start a root session."
+fi
+
+launch_agent "$prompt"
+agent_status=$?
+
+if [ -n "$slug" ]; then
+  "$RUN" post "$slug"
+else
+  "$RUN" post
+fi
+exit $agent_status
