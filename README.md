@@ -1,4 +1,4 @@
-# jig
+<p align="center"><img src="docs/assets/logo-card.svg" alt="jig" height="112"></p>
 
 Tooling for a personal workbench: one place per machine to keep ideas, POCs, and long-running AI conversations that outlive a chat but aren't projects yet. Entries are plain markdown in git. An agent does the bookkeeping. You remember one command: `wb`.
 
@@ -13,8 +13,8 @@ The data lives in a separate repo (default `~/workbench`). jig never syncs data 
 ## Install
 
 ```sh
-git clone <this repo> ~/Code/cmgmyr/jig
-cd ~/Code/cmgmyr/jig
+git clone https://github.com/cmgmyr/jig.git ~/Code/jig
+cd ~/Code/jig
 ./install.sh                                      # uses /opt/homebrew/opt/node@24/bin/node
 JIG_NODE=/abs/path/to/bin/node ./install.sh       # or pin a specific binary
 ```
