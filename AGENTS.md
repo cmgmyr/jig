@@ -1,6 +1,6 @@
 # jig
 
-Tooling for Chris's workbench. This repo holds the scripts, templates, skills, and installer. The data repo is separate (`$WORKBENCH_HOME`, default `~/workbench`) and is never checked in here.
+Tooling for the workbench. This repo holds the scripts, templates, skills, and installer. The data repo is separate (`$WORKBENCH_HOME`, default `~/workbench`) and is never checked in here.
 
 Read `README.md` for what the commands do and `.claude/plans/prd.md` for the full spec and phase plan. Build only the current phase. Do not build anything under "Deferred" or "Non-goals" in the PRD.
 
@@ -22,7 +22,7 @@ Read `README.md` for what the commands do and `.claude/plans/prd.md` for the ful
 - `wb doctor --fix` may relink, restore `CLAUDE.md`, regenerate `INDEX.md`, and refresh the managed block. It must never delete a real directory, edit entry content, or change the pinned interpreter.
 - Skills stay harness-neutral: `name` and `description` frontmatter only, no Claude-specific tool names, no `$CLAUDE_*` variables, no paths relative to the skill file.
 - Changing `templates/AGENTS.md` changes the managed block in every workbench. `wb doctor` flags the drift and `--fix` applies it.
-- Do not commit or push unless Chris asks.
+- Do not commit or push unless the human asks.
 
 ## Before finishing a change
 
