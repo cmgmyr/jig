@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Pin the interpreter
+        run: echo "JIG_NODE=$(command -v node)" >> "$GITHUB_ENV"
+      - name: Typecheck
+        run: ./test/typecheck.sh
+      - name: Unit tests
+        run: node --test test/*.test.ts
+      - name: Smoke test
+        run: ./test/smoke.sh
